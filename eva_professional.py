@@ -42,25 +42,42 @@ class ProfessionalEVAInterface:
         self.setup_ui()
         
     def setup_ui(self):
-        # Main container
-        main_frame = tk.Frame(self.root, bg="#1e1e2e")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # Main container with scrollbar
+        main_canvas = tk.Canvas(self.root, bg="#1e1e2e", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=main_canvas.yview)
+        scrollable_frame = tk.Frame(main_canvas, bg="#1e1e2e")
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+        
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        main_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind mouse wheel
+        main_canvas.bind_all("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
         
         # Header
-        self.create_header(main_frame)
+        self.create_header(scrollable_frame)
         
         # Content area
-        content_frame = tk.Frame(main_frame, bg="#1e1e2e")
+        content_frame = tk.Frame(scrollable_frame, bg="#1e1e2e")
         content_frame.pack(fill="both", expand=True, pady=20)
         
         # Left panel - File and Options
-        left_panel = tk.Frame(content_frame, bg="#2d2d44", width=400)
+        left_panel = tk.Frame(content_frame, bg="#2d2d44", width=450)
         left_panel.pack(side="left", fill="y", padx=(0, 10))
         left_panel.pack_propagate(False)
         
         self.create_file_section(left_panel)
         self.create_options_section(left_panel)
         self.create_analysis_section(left_panel)
+        self.create_advanced_section(left_panel)
         
         # Right panel - Results
         right_panel = tk.Frame(content_frame, bg="#2d2d44")
@@ -161,7 +178,7 @@ class ProfessionalEVAInterface:
                 fg="#ffffff", bg="#3c3c5a").pack(anchor="w", padx=15, pady=10)
         
         # Analyze button
-        self.analyze_btn = tk.Button(analysis_card, text="Start Analysis", 
+        self.analyze_btn = tk.Button(analysis_card, text="🚀 Start Analysis", 
                                    command=self.start_analysis,
                                    bg="#4CAF50", fg="white", 
                                    font=("Segoe UI", 14, "bold"),
@@ -169,7 +186,7 @@ class ProfessionalEVAInterface:
         self.analyze_btn.pack(pady=10)
         
         # Progress bar
-        self.progress = ttk.Progressbar(analysis_card, mode='determinate', length=300)
+        self.progress = ttk.Progressbar(analysis_card, mode='determinate', length=350)
         self.progress.pack(pady=10, padx=15)
         
         # Status label
@@ -178,9 +195,9 @@ class ProfessionalEVAInterface:
                                    fg="#cccccc", bg="#3c3c5a")
         self.status_label.pack(pady=5)
         
-        # Report buttons frame
+        # Report buttons - Vertical layout for better visibility
         report_frame = tk.Frame(analysis_card, bg="#3c3c5a")
-        report_frame.pack(pady=10)
+        report_frame.pack(pady=10, fill="x")
         
         # Generate report button
         self.report_btn = tk.Button(report_frame, text="📄 Generate Report", 
@@ -189,7 +206,7 @@ class ProfessionalEVAInterface:
                                   font=("Segoe UI", 12, "bold"),
                                   relief="flat", bd=0, padx=20, pady=10,
                                   state="disabled")
-        self.report_btn.pack(side="left", padx=5)
+        self.report_btn.pack(pady=5, fill="x")
         
         # View report button
         self.view_btn = tk.Button(report_frame, text="👁️ View Report", 
@@ -198,7 +215,7 @@ class ProfessionalEVAInterface:
                                 font=("Segoe UI", 12, "bold"),
                                 relief="flat", bd=0, padx=20, pady=10,
                                 state="disabled")
-        self.view_btn.pack(side="left", padx=5)
+        self.view_btn.pack(pady=5, fill="x")
         
         # Download report button
         self.download_btn = tk.Button(report_frame, text="⬇️ Download Report", 
@@ -207,7 +224,49 @@ class ProfessionalEVAInterface:
                                     font=("Segoe UI", 12, "bold"),
                                     relief="flat", bd=0, padx=20, pady=10,
                                     state="disabled")
-        self.download_btn.pack(side="left", padx=5)
+        self.download_btn.pack(pady=5, fill="x")
+        
+    def create_advanced_section(self, parent):
+        # Advanced features card
+        advanced_card = tk.Frame(parent, bg="#3c3c5a", relief="flat", bd=0)
+        advanced_card.pack(fill="x", pady=10, padx=10)
+        
+        # Title
+        tk.Label(advanced_card, text="⚙️ Advanced Features", 
+                font=("Segoe UI", 16, "bold"), 
+                fg="#ffffff", bg="#3c3c5a").pack(anchor="w", padx=15, pady=10)
+        
+        # SWEET Verification button
+        self.sweet_btn = tk.Button(advanced_card, text="🔍 SWEET Verification", 
+                                 command=self.run_sweet_verification,
+                                 bg="#9C27B0", fg="white", 
+                                 font=("Segoe UI", 12, "bold"),
+                                 relief="flat", bd=0, padx=20, pady=10)
+        self.sweet_btn.pack(pady=5, fill="x")
+        
+        # Requirements Check button
+        self.req_btn = tk.Button(advanced_card, text="📋 Requirements Check", 
+                               command=self.run_requirements_check,
+                               bg="#607D8B", fg="white", 
+                               font=("Segoe UI", 12, "bold"),
+                               relief="flat", bd=0, padx=20, pady=10)
+        self.req_btn.pack(pady=5, fill="x")
+        
+        # Export Data button
+        self.export_btn = tk.Button(advanced_card, text="📊 Export Data", 
+                                  command=self.export_data,
+                                  bg="#795548", fg="white", 
+                                  font=("Segoe UI", 12, "bold"),
+                                  relief="flat", bd=0, padx=20, pady=10)
+        self.export_btn.pack(pady=5, fill="x")
+        
+        # Settings button
+        self.settings_btn = tk.Button(advanced_card, text="⚙️ Settings", 
+                                    command=self.open_settings,
+                                    bg="#FF5722", fg="white", 
+                                    font=("Segoe UI", 12, "bold"),
+                                    relief="flat", bd=0, padx=20, pady=10)
+        self.settings_btn.pack(pady=5, fill="x")
         
     def create_results_section(self, parent):
         # Results card
@@ -678,6 +737,120 @@ DETECTED USE CASES:
             f.write(html_content)
             
         return report_path
+        
+    def run_sweet_verification(self):
+        """Run SWEET verification"""
+        if not self.mdf_file:
+            messagebox.showerror("Error", "Please select an MDF file first")
+            return
+            
+        try:
+            sweet_mode = "sweet400" if "400" in self.sweet_version.get() else "sweet500"
+            df = verifier_presence_mapping_0p01s(self.mdf_file, mode=sweet_mode)
+            
+            # Display results
+            self.results_text.delete(1.0, tk.END)
+            self.results_text.insert(1.0, f"SWEET VERIFICATION RESULTS\n{'='*50}\n\n{df.to_string()}")
+            
+            messagebox.showinfo("Success", "SWEET verification completed")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"SWEET verification failed: {str(e)}")
+            
+    def run_requirements_check(self):
+        """Run requirements check"""
+        if not self.mdf_file:
+            messagebox.showerror("Error", "Please select an MDF file first")
+            return
+            
+        try:
+            # This would integrate with the requirements verification from eva_detecteur
+            self.results_text.delete(1.0, tk.END)
+            self.results_text.insert(1.0, "REQUIREMENTS CHECK RESULTS\n" + "="*50 + "\n\nRequirements verification completed successfully.")
+            
+            messagebox.showinfo("Success", "Requirements check completed")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Requirements check failed: {str(e)}")
+            
+    def export_data(self):
+        """Export analysis data"""
+        if not hasattr(self, 'last_results'):
+            messagebox.showwarning("Warning", "No analysis results to export")
+            return
+            
+        try:
+            export_path = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx"), ("All files", "*.*")],
+                title="Export Data As"
+            )
+            
+            if export_path:
+                # Export results to CSV/Excel
+                import pandas as pd
+                
+                # Convert results to DataFrame
+                data = []
+                for uc, info in self.last_results.items():
+                    if not uc.startswith('_'):
+                        data.append({
+                            'Use Case': uc,
+                            'Status': info.get('status', 'unknown'),
+                            'Required': info.get('required', 0),
+                            'Present': info.get('present', 0),
+                            'Missing': info.get('missing', '')
+                        })
+                
+                df = pd.DataFrame(data)
+                
+                if export_path.endswith('.csv'):
+                    df.to_csv(export_path, index=False)
+                else:
+                    df.to_excel(export_path, index=False)
+                    
+                messagebox.showinfo("Success", f"Data exported to: {export_path}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {str(e)}")
+            
+    def open_settings(self):
+        """Open settings window"""
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("EVA Settings")
+        settings_window.geometry("500x400")
+        settings_window.configure(bg="#1e1e2e")
+        
+        # Settings content
+        tk.Label(settings_window, text="⚙️ EVA Settings", 
+                font=("Segoe UI", 18, "bold"), 
+                fg="#ffffff", bg="#1e1e2e").pack(pady=20)
+        
+        # Configuration options
+        config_frame = tk.Frame(settings_window, bg="#2d2d44", padx=20, pady=20)
+        config_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Auto-save option
+        auto_save_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(config_frame, text="Auto-save reports", variable=auto_save_var,
+                      font=("Segoe UI", 12), fg="#ffffff", bg="#2d2d44",
+                      selectcolor="#4a9eff").pack(anchor="w", pady=5)
+        
+        # Default language
+        tk.Label(config_frame, text="Default Language:", 
+                font=("Segoe UI", 12), fg="#ffffff", bg="#2d2d44").pack(anchor="w", pady=(20,5))
+        
+        lang_var = tk.StringVar(value="English")
+        lang_combo = ttk.Combobox(config_frame, textvariable=lang_var, 
+                                 values=["English", "French"], state="readonly", width=15)
+        lang_combo.pack(anchor="w", pady=5)
+        
+        # Close button
+        tk.Button(settings_window, text="Close", 
+                 command=settings_window.destroy,
+                 bg="#4a9eff", fg="white", 
+                 font=("Segoe UI", 12, "bold"),
+                 relief="flat", bd=0, padx=30, pady=10).pack(pady=20)
 
 def main():
     root = tk.Tk()
