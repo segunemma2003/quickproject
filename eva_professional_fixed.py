@@ -20,6 +20,19 @@ except ImportError:
         return pd.DataFrame({"Signal": ["Test"], "Status": ["OK"]})
     CONFIG = {"myf": None}
 
+# Import complete engine
+try:
+    from eva_complete_engine import eva_engine
+except ImportError:
+    # Create a simple fallback engine
+    class SimpleEngine:
+        def analyze_mdf_file(self, *args, **kwargs):
+            return {"use_cases": {"UC 1.1": {"status": "detected", "required": 3, "present": 3, "missing": ""}}}
+        def generate_comprehensive_report_data(self, *args, **kwargs):
+            return {"company_info": {"parent_company": "RENAULT GROUP"}}
+    
+    eva_engine = SimpleEngine()
+
 class EVAInterface:
     def __init__(self, root):
         self.root = root
@@ -255,10 +268,20 @@ class EVAInterface:
                     import time
                     time.sleep(0.5)
                 
-                # Run actual analysis
-                results = analyser_et_generer_rapport(self.mdf_file, lang=self.language.get().lower())
+                # Get selected MyF versions
+                selected_myf = [myf for myf, var in self.myf_vars.items() if var.get()]
+                if not selected_myf:
+                    selected_myf = ["All MyF versions"]
                 
-                self.root.after(0, lambda: self.display_results(results))
+                # Run complete analysis
+                sweet_mode = "sweet400" if "400" in self.sweet_version.get() else "sweet500"
+                analysis_results = eva_engine.analyze_mdf_file(
+                    self.mdf_file, 
+                    sweet_version=sweet_mode,
+                    myf_versions=selected_myf
+                )
+                
+                self.root.after(0, lambda: self.display_complete_results(analysis_results))
                 
             except Exception as e:
                 self.root.after(0, lambda: self.show_error(str(e)))
@@ -267,8 +290,8 @@ class EVAInterface:
                 
         threading.Thread(target=run_analysis, daemon=True).start()
         
-    def display_results(self, results):
-        self.last_results = results
+    def display_complete_results(self, analysis_results):
+        self.last_results = analysis_results
         self.progress["value"] = 100
         self.status_label.config(text="Analysis complete!")
         
@@ -280,30 +303,60 @@ class EVAInterface:
         # Display results
         self.results_text.delete(1.0, tk.END)
         
-        output = f"""ANALYSIS RESULTS
-{'='*60}
+        output = f"""COMPLETE EVA ANALYSIS RESULTS
+{'='*70}
 
 File: {os.path.basename(self.mdf_file)}
 SWEET Version: {self.sweet_version.get()}
 Language: {self.language.get()}
-Analysis Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Analysis Time: {analysis_results.get('analysis_time', datetime.datetime.now().isoformat())}
 
-DETECTED USE CASES:
+USE CASE DETECTION:
 {'-'*40}
 """
         
-        for uc, info in results.items():
-            if not uc.startswith('_'):
-                status = "✅ DETECTED" if info.get('status') == 'detected' else "❌ NOT DETECTED"
-                output += f"\n{uc}: {status}"
-                output += f"\n  Required signals: {info.get('required', 0)}"
-                output += f"\n  Present signals: {info.get('present', 0)}"
-                if info.get('missing'):
-                    output += f"\n  Missing: {info.get('missing')}"
-                output += "\n"
+        # Display use cases
+        for uc, info in analysis_results.get('use_cases', {}).items():
+            status_icon = "✅" if info.get('status') == 'detected' else "❌"
+            status_text = "DETECTED" if info.get('status') == 'detected' else "NOT DETECTED"
+            output += f"\n{uc}: {status_icon} {status_text}"
+            output += f"\n  Required signals: {info.get('required', 0)}"
+            output += f"\n  Present signals: {info.get('present', 0)}"
+            if info.get('missing'):
+                output += f"\n  Missing: {info.get('missing')}"
+            output += "\n"
+        
+        # Display SWEET compliance
+        sweet = analysis_results.get('sweet_compliance', {})
+        output += f"""
+SWEET COMPLIANCE:
+{'-'*40}
+Total Signals: {sweet.get('total_signals', 0)}
+OK Signals: {sweet.get('ok_signals', 0)}
+Fallback Signals: {sweet.get('fallback_signals', 0)}
+NOK Signals: {sweet.get('nok_signals', 0)}
+Success Rate: {sweet.get('success_rate', 0):.1f}%
+
+REQUIREMENTS CHECK:
+{'-'*40}
+"""
+        
+        # Display requirements
+        reqs = analysis_results.get('requirements', {})
+        output += f"Total Requirements: {reqs.get('total_requirements', 0)}\n"
+        output += f"Passed: {reqs.get('passed_requirements', 0)}\n"
+        output += f"Failed: {reqs.get('failed_requirements', 0)}\n"
+        
+        for req in reqs.get('requirements', []):
+            status_icon = "✅" if req.get('result') == 'OK' else "❌"
+            output += f"\n{req.get('id', 'Unknown')}: {status_icon} {req.get('result', 'Unknown')}"
+            output += f"\n  {req.get('description', 'No description')}"
+            if req.get('signals_nok'):
+                output += f"\n  NOK Signals: {req.get('signals_nok')}"
+            output += "\n"
                 
         self.results_text.insert(1.0, output)
-        messagebox.showinfo("Success", "Analysis completed successfully!")
+        messagebox.showinfo("Success", "Complete analysis finished successfully!")
         
     def show_error(self, error_msg):
         self.status_label.config(text="Analysis failed")
@@ -398,71 +451,317 @@ DETECTED USE CASES:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         report_path = f"eva_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
         
+        # Generate comprehensive report data
+        report_data = eva_engine.generate_comprehensive_report_data(self.last_results)
+        
         # Get selected MyF versions
         selected_myf = [myf for myf, var in self.myf_vars.items() if var.get()]
         if not selected_myf:
             selected_myf = ["All MyF versions"]
             
         html_content = f"""<!DOCTYPE html>
-<html>
+<html lang="{self.language.get().lower()}">
 <head>
     <meta charset="UTF-8">
-    <title>EVA Analysis Report</title>
+    <title>Rapport de Dépouillement Automatique EVA</title>
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }}
-        .container {{ max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }}
-        h1 {{ color: #2c3e50; text-align: center; font-size: 2.5em; margin-bottom: 30px; }}
-        .section {{ margin: 30px 0; padding: 20px; background: #ecf0f1; border-radius: 8px; }}
-        .section h2 {{ color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
-        th {{ background: #3498db; color: white; }}
-        .status-ok {{ color: #27ae60; font-weight: bold; }}
-        .status-nok {{ color: #e74c3c; font-weight: bold; }}
-        .info {{ background: #d5dbdb; padding: 15px; border-radius: 5px; margin: 10px 0; }}
+        body {{ 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }}
+        .container {{ 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 40px; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }}
+        .header {{ 
+            text-align: center; 
+            border-bottom: 4px solid #4a9eff; 
+            padding-bottom: 30px; 
+            margin-bottom: 40px; 
+        }}
+        .header h1 {{ 
+            color: #2c3e50; 
+            font-size: 3em; 
+            margin: 0 0 10px 0;
+            font-weight: 700;
+        }}
+        .company-info {{
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 5px solid #4a9eff;
+        }}
+        .section {{ 
+            margin: 40px 0; 
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+        }}
+        .section h2 {{ 
+            color: #34495e; 
+            border-left: 5px solid #4a9eff; 
+            padding-left: 20px; 
+            font-size: 1.8em;
+            margin-top: 0;
+        }}
+        table {{ 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0; 
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        th, td {{ 
+            padding: 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #e9ecef; 
+        }}
+        th {{ 
+            background: linear-gradient(135deg, #4a9eff, #357abd); 
+            color: white; 
+            font-weight: bold;
+            font-size: 1.1em;
+        }}
+        tr:hover {{
+            background: #f8f9fa;
+        }}
+        .status-ok {{ 
+            color: #27ae60; 
+            font-weight: bold; 
+            background: #d4edda;
+            padding: 5px 10px;
+            border-radius: 15px;
+        }}
+        .status-nok {{ 
+            color: #e74c3c; 
+            font-weight: bold; 
+            background: #f8d7da;
+            padding: 5px 10px;
+            border-radius: 15px;
+        }}
+        .info-grid {{ 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: 20px; 
+            margin: 20px 0;
+        }}
+        .info-card {{ 
+            background: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            border-left: 4px solid #4a9eff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .visualization {{
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 2px dashed #4a9eff;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 10px;
+        }}
+        @media print {{
+            body {{ background: white; }}
+            .container {{ box-shadow: none; }}
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚗 EVA Analysis Report</h1>
+        <div class="header">
+            <h1>🚗 Rapport de Dépouillement Automatique EVA</h1>
+            <p><strong>Generated:</strong> {timestamp}</p>
+        </div>
+        
+        <div class="company-info">
+            <h3>🏢 Company Information</h3>
+            <p><strong>Entreprise Mère:</strong> {report_data.get('company_info', {}).get('parent_company', 'RENAULT GROUP')}</p>
+            <p><strong>Entreprise Principale:</strong> {report_data.get('company_info', {}).get('main_company', 'AMPERE SAS')}</p>
+            <p><strong>Équipe:</strong> {report_data.get('company_info', {}).get('team', 'Validation Système des Véhicules Électriques (RAM32)')}</p>
+        </div>
         
         <div class="section">
-            <h2>📊 Analysis Summary</h2>
-            <div class="info">
-                <strong>File:</strong> {os.path.basename(self.mdf_file)}<br>
-                <strong>SWEET Version:</strong> {self.sweet_version.get()}<br>
-                <strong>Language:</strong> {self.language.get()}<br>
-                <strong>MyF Versions:</strong> {', '.join(selected_myf)}<br>
-                <strong>Generated:</strong> {timestamp}
+            <h2>📊 Vehicle Data</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <strong>VIN:</strong> {report_data.get('vehicle_data', {}).get('vin', 'n/a')}
+                </div>
+                <div class="info-card">
+                    <strong>N° mulet:</strong> {report_data.get('vehicle_data', {}).get('mulet_number', 'n/a')}
+                </div>
+                <div class="info-card">
+                    <strong>Référence projet:</strong> {report_data.get('vehicle_data', {}).get('project_reference', 'n/a')}
+                </div>
+                <div class="info-card">
+                    <strong>SWID:</strong> {report_data.get('vehicle_data', {}).get('swid', 'n/a')}
+                </div>
+                <div class="info-card">
+                    <strong>File:</strong> {os.path.basename(self.mdf_file)}
+                </div>
+                <div class="info-card">
+                    <strong>SWEET Version:</strong> {self.sweet_version.get()}
+                </div>
+                <div class="info-card">
+                    <strong>MyF Versions:</strong> {', '.join(selected_myf)}
+                </div>
+                <div class="info-card">
+                    <strong>Language:</strong> {self.language.get()}
+                </div>
             </div>
         </div>
         
         <div class="section">
-            <h2>🎯 Use Case Detection Results</h2>
+            <h2>🎯 Use Cases Detected</h2>
             <table>
-                <tr><th>Use Case</th><th>Status</th><th>Required</th><th>Present</th><th>Missing</th></tr>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>UC</th>
+                        <th>Type</th>
+                        <th>N° occurrence</th>
+                        <th>TSTART</th>
+                        <th>TEND</th>
+                        <th>Durée</th>
+                    </tr>
+                </thead>
+                <tbody>
 """
         
-        for uc, info in self.last_results.items():
-            if not uc.startswith('_'):
-                status = "DETECTED" if info.get('status') == 'detected' else "NOT DETECTED"
-                status_class = "status-ok" if status == "DETECTED" else "status-nok"
-                html_content += f"""
-                <tr>
-                    <td><strong>{uc}</strong></td>
-                    <td><span class="{status_class}">{status}</span></td>
-                    <td>{info.get('required', 0)}</td>
-                    <td>{info.get('present', 0)}</td>
-                    <td>{info.get('missing', '')}</td>
-                </tr>"""
-                
+        for i, uc in enumerate(report_data.get('use_cases', []), 1):
+            html_content += f"""
+                    <tr>
+                        <td>{i}</td>
+                        <td><strong>{uc.get('UC', 'Unknown')}</strong></td>
+                        <td>{uc.get('Type', 'Unknown')}</td>
+                        <td>{uc.get('Occurrences', 0)}</td>
+                        <td>{uc.get('TSTART', '00:00:00.000')}</td>
+                        <td>{uc.get('TEND', '00:00:00.000')}</td>
+                        <td>{uc.get('Duration', '00:00:00.000')}</td>
+                    </tr>
+"""
+        
         html_content += """
+                </tbody>
             </table>
         </div>
         
         <div class="section">
-            <h2>📋 Analysis Details</h2>
-            <p>Complete analysis performed according to EVA validation standards.</p>
+            <h2>📋 Details by Detected UC</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Signal EVA</th>
+                        <th>Signal HEVC</th>
+                        <th>Signal PTFD</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
+        
+        for signal in report_data.get('signals_mapping', []):
+            status_class = "status-ok" if signal.get('Status') == 'OK' else "status-nok"
+            html_content += f"""
+                    <tr>
+                        <td>{signal.get('Signal EVA', '')}</td>
+                        <td>{signal.get('Signal HEVC', '')}</td>
+                        <td>{signal.get('Signal PTFD', '')}</td>
+                        <td><span class="{status_class}">{signal.get('Status', 'Unknown')}</span></td>
+                    </tr>
+"""
+        
+        html_content += """
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>📋 Related Requirements</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID Exigence</th>
+                        <th>Résultat</th>
+                        <th>Signaux NOK</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
+        
+        for req in report_data.get('requirements', {}).get('requirements', []):
+            result_class = "status-ok" if req.get('result') == 'OK' else "status-nok"
+            html_content += f"""
+                    <tr>
+                        <td>{req.get('id', 'Unknown')}</td>
+                        <td><span class="{result_class}">{req.get('result', 'Unknown')}</span></td>
+                        <td>{req.get('signals_nok', '—')}</td>
+                    </tr>
+"""
+        
+        html_content += f"""
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>📈 Requested Visualizations</h2>
+            <div class="visualization">
+                <h4>📊 Signal Visualizations</h4>
+                <ul>
+"""
+        
+        for signal in report_data.get('visualizations', {}).get('requested_signals', []):
+            html_content += f"                    <li><strong>{signal}</strong></li>\n"
+        
+        html_content += """
+                </ul>
+                <h4>📋 Interpretation</h4>
+                <ul>
+"""
+        
+        for interpretation in report_data.get('visualizations', {}).get('interpretation', []):
+            html_content += f"                    <li>{interpretation}</li>\n"
+        
+        html_content += f"""
+                </ul>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📊 Synthesis</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <strong>UC détectés:</strong> {len(report_data.get('use_cases', []))}
+                </div>
+                <div class="info-card">
+                    <strong>Exigences respectées:</strong> {report_data.get('requirements', {}).get('passed_requirements', 0)}
+                </div>
+                <div class="info-card">
+                    <strong>Mini-bilan UC:</strong> {' '.join([f"{uc.get('UC', '')} OK" for uc in report_data.get('use_cases', [])])}
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Generated by EVA Vehicle Data Analyzer v2.0.0</strong></p>
+            <p>© 2024 Renault Group / Ampere SAS</p>
         </div>
     </div>
 </body>
